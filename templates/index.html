@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="星笺：支持收藏、多联系方式和Excel导入导出的本地通讯录">
+  <meta name="description" content="星笺：支持收藏、多联系方式、账户认证和Excel导入导出的私人通讯录">
   <title>星笺 · 私人通讯录</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,7 +11,63 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <div class="app-shell">
+  <section id="authScreen" class="auth-screen" aria-live="polite">
+    <div class="auth-brand-panel">
+      <div class="auth-brand-top">
+        <a class="brand" href="#" aria-label="星笺通讯录"><span class="brand-mark">星</span><span><strong>星笺</strong><small>PRIVATE CONTACT BOOK</small></span></a>
+        <span class="auth-tag">LOCAL · PRIVATE</span>
+      </div>
+      <div class="auth-statement">
+        <p class="eyebrow">EVERY CONNECTION MATTERS</p>
+        <h1>让重要的人，<br>始终在你<em>身边</em>。</h1>
+        <p>把姓名、电话、邮箱与每一段重要关系，安静地收进只属于你的通讯录。</p>
+      </div>
+      <div class="auth-art" aria-hidden="true"><i></i><i></i><i></i><span>星</span></div>
+      <div class="auth-brand-foot"><span>EE308FZ · XP PAIR PROJECT</span><span>数据仅保存在本机</span></div>
+    </div>
+
+    <main class="auth-panel">
+      <div class="auth-box">
+        <p class="auth-eyebrow" id="authEyebrow">SIGN IN</p>
+        <h2 id="authTitle">欢迎回来</h2>
+        <p id="authSubtitle">登录后进入你的私人通讯录。</p>
+
+        <div class="auth-tabs" role="tablist" aria-label="账户操作">
+          <button type="button" class="auth-tab active" data-auth-view="login" role="tab">登录</button>
+          <button type="button" class="auth-tab" data-auth-view="register" role="tab">注册</button>
+          <button type="button" class="auth-tab" data-auth-view="reset" role="tab">重置密码</button>
+        </div>
+
+        <form id="loginForm" class="auth-form" data-view="login">
+          <label class="field"><span>用户名 / 手机号</span><input id="loginAccount" autocomplete="username" required placeholder="输入用户名或手机号"></label>
+          <label class="field"><span>密码</span><input id="loginPassword" type="password" autocomplete="current-password" required placeholder="输入密码"></label>
+          <button class="button primary auth-submit" type="submit">进入通讯录 →</button>
+          <button class="auth-link" type="button" data-switch-view="reset">忘记密码？使用手机号重置</button>
+        </form>
+
+        <form id="registerForm" class="auth-form" data-view="register" hidden>
+          <label class="field"><span>用户名</span><input id="registerUsername" maxlength="30" autocomplete="username" required placeholder="2至30个字符"></label>
+          <label class="field"><span>手机号</span><input id="registerPhone" inputmode="numeric" maxlength="11" autocomplete="tel" required placeholder="11位中国大陆手机号"></label>
+          <div class="code-row"><label class="field"><span>验证码</span><input id="registerCode" inputmode="numeric" maxlength="6" required placeholder="6位验证码"></label><button class="button ghost code-button" type="button" data-send-code="register">获取验证码</button></div>
+          <label class="field"><span>设置密码</span><input id="registerPassword" type="password" minlength="8" autocomplete="new-password" required placeholder="至少8位，包含字母和数字"></label>
+          <button class="button primary auth-submit" type="submit">注册并进入 →</button>
+        </form>
+
+        <form id="resetForm" class="auth-form" data-view="reset" hidden>
+          <label class="field"><span>注册手机号</span><input id="resetPhone" inputmode="numeric" maxlength="11" autocomplete="tel" required placeholder="输入注册时的手机号"></label>
+          <div class="code-row"><label class="field"><span>验证码</span><input id="resetCode" inputmode="numeric" maxlength="6" required placeholder="6位验证码"></label><button class="button ghost code-button" type="button" data-send-code="reset">获取验证码</button></div>
+          <label class="field"><span>新密码</span><input id="resetPassword" type="password" minlength="8" autocomplete="new-password" required placeholder="至少8位，包含字母和数字"></label>
+          <button class="button primary auth-submit" type="submit">确认重置密码</button>
+        </form>
+
+        <div id="authMessage" class="auth-message" role="status"></div>
+        <div class="auth-hint"><strong>本地演示模式</strong><span>验证码不会发送到真实手机，将直接显示在此页面并输出到本机终端。</span></div>
+      </div>
+      <footer class="auth-footer"><span>© 2026 XINGJIAN</span><span>密码使用哈希保存</span></footer>
+    </main>
+  </section>
+
+  <div id="appShell" class="app-shell" hidden>
     <aside class="sidebar">
       <a class="brand" href="#" aria-label="星笺通讯录首页">
         <span class="brand-mark">星</span>
@@ -31,6 +87,7 @@
         <span>本地数据</span>
         <p>联系人保存在 SQLite 数据库中，仅在你的电脑上运行。</p>
       </div>
+      <div class="account-card"><span id="accountAvatar">用</span><div><strong id="accountName">用户</strong><small id="accountPhone">—</small></div><button id="logoutButton" type="button" aria-label="退出登录">↪</button></div>
       <p class="version">EE308FZ · XP Pair Project</p>
     </aside>
 

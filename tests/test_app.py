@@ -18,6 +18,14 @@ class AddressBookTestCase(unittest.TestCase):
         address_app.init_db()
         address_app.app.config.update(TESTING=True)
         self.client = address_app.app.test_client()
+        code = self.client.post(
+            "/api/auth/send-code", json={"phone": "13800000001", "purpose": "register"}
+        ).get_json()["demoCode"]
+        registered = self.client.post(
+            "/api/auth/register",
+            json={"username": "测试用户", "phone": "13800000001", "password": "Test12345", "code": code},
+        )
+        self.assertEqual(registered.status_code, 201)
 
     def tearDown(self):
         os.unlink(self.database_file.name)
@@ -81,6 +89,42 @@ class AddressBookTestCase(unittest.TestCase):
             ).status_code,
             400,
         )
+
+    def test_login_logout_and_password_reset(self):
+        self.assertEqual(self.client.post("/api/auth/logout").status_code, 200)
+        self.assertEqual(self.client.get("/api/contacts").status_code, 401)
+        self.assertEqual(
+            self.client.post(
+                "/api/auth/login", json={"account": "测试用户", "password": "wrong-password"}
+            ).status_code,
+            401,
+        )
+        code = self.client.post(
+            "/api/auth/send-code", json={"phone": "13800000001", "purpose": "reset"}
+        ).get_json()["demoCode"]
+        reset = self.client.post(
+            "/api/auth/reset-password",
+            json={"phone": "13800000001", "password": "NewPass123", "code": code},
+        )
+        self.assertEqual(reset.status_code, 200)
+        login = self.client.post(
+            "/api/auth/login", json={"account": "13800000001", "password": "NewPass123"}
+        )
+        self.assertEqual(login.status_code, 200)
+
+    def test_contacts_are_isolated_between_accounts(self):
+        self.create_contact(name="第一个账户的联系人")
+        self.client.post("/api/auth/logout")
+        code = self.client.post(
+            "/api/auth/send-code", json={"phone": "13900000002", "purpose": "register"}
+        ).get_json()["demoCode"]
+        self.client.post(
+            "/api/auth/register",
+            json={"username": "第二用户", "phone": "13900000002", "password": "Other1234", "code": code},
+        )
+        contacts = self.client.get("/api/contacts").get_json()["contacts"]
+        self.assertEqual(contacts, [])
+
 
 if __name__ == "__main__":
     unittest.main()

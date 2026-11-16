@@ -7,7 +7,9 @@ const elements = {
   title: $("#pageTitle"), subtitle: $("#pageSubtitle"), dialog: $("#contactDialog"), form: $("#contactForm"),
   dialogTitle: $("#dialogTitle"), name: $("#nameInput"), company: $("#companyInput"), favorite: $("#favoriteInput"),
   notes: $("#notesInput"), methods: $("#methodsList"), methodTemplate: $("#methodTemplate"),
-  importInput: $("#importInput"), confirmDialog: $("#confirmDialog"), toast: $("#toast")
+  importInput: $("#importInput"), confirmDialog: $("#confirmDialog"), toast: $("#toast"),
+  authScreen: $("#authScreen"), appShell: $("#appShell"), authMessage: $("#authMessage"),
+  accountName: $("#accountName"), accountPhone: $("#accountPhone"), accountAvatar: $("#accountAvatar")
 };
 
 const methodIcons = { phone: "☎", email: "@", social: "#", address: "⌖", other: "·" };
@@ -39,6 +41,122 @@ function showToast(message, isError = false) {
 function debounce(callback, wait = 250) {
   let timer;
   return (...args) => { clearTimeout(timer); timer = setTimeout(() => callback(...args), wait); };
+}
+
+const authCopy = {
+  login: ["SIGN IN", "欢迎回来", "登录后进入你的私人通讯录。"],
+  register: ["CREATE ACCOUNT", "创建本地账户", "首次使用需要手机号验证。"],
+  reset: ["RECOVER ACCESS", "重置密码", "使用注册手机号验证身份。"]
+};
+
+function setAuthMessage(message = "", type = "") {
+  elements.authMessage.textContent = message;
+  elements.authMessage.className = `auth-message${type ? ` ${type}` : ""}`;
+}
+
+function switchAuthView(view) {
+  document.querySelectorAll(".auth-tab").forEach(tab => {
+    const active = tab.dataset.authView === view;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll(".auth-form").forEach(form => { form.hidden = form.dataset.view !== view; });
+  $("#authEyebrow").textContent = authCopy[view][0];
+  $("#authTitle").textContent = authCopy[view][1];
+  $("#authSubtitle").textContent = authCopy[view][2];
+  setAuthMessage();
+}
+
+function showAuthenticatedApp(user) {
+  elements.authScreen.hidden = true;
+  elements.appShell.hidden = false;
+  elements.accountName.textContent = user.username;
+  elements.accountPhone.textContent = user.phone.replace(/^(\d{3})\d{4}(\d{4})$/, "$1****$2");
+  elements.accountAvatar.textContent = user.username.slice(0, 1).toUpperCase();
+  loadContacts();
+}
+
+async function bootstrapAuth() {
+  try {
+    const status = await api("/api/auth/status");
+    if (status.loggedIn) showAuthenticatedApp(status.user);
+    else {
+      elements.authScreen.hidden = false;
+      elements.appShell.hidden = true;
+      switchAuthView(status.hasAccounts ? "login" : "register");
+      if (!status.hasAccounts) setAuthMessage("检测到这是首次使用，请先注册第一个账户。", "demo");
+    }
+  } catch (error) { setAuthMessage(error.message, "error"); }
+}
+
+async function sendCode(purpose, button) {
+  const phone = $(purpose === "register" ? "#registerPhone" : "#resetPhone").value.trim();
+  button.disabled = true;
+  try {
+    const result = await api("/api/auth/send-code", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, purpose })
+    });
+    setAuthMessage(`本地演示验证码：${result.demoCode}（10分钟内有效）`, "demo");
+    const codeInput = $(purpose === "register" ? "#registerCode" : "#resetCode");
+    codeInput.value = result.demoCode;
+    codeInput.focus();
+    let remaining = 60;
+    button.textContent = `${remaining}秒后重试`;
+    const timer = setInterval(() => {
+      remaining -= 1;
+      button.textContent = `${remaining}秒后重试`;
+      if (remaining <= 0) { clearInterval(timer); button.disabled = false; button.textContent = "重新获取"; }
+    }, 1000);
+  } catch (error) { button.disabled = false; setAuthMessage(error.message, "error"); }
+}
+
+async function submitLogin(event) {
+  event.preventDefault();
+  try {
+    const result = await api("/api/auth/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account: $("#loginAccount").value.trim(), password: $("#loginPassword").value })
+    });
+    showAuthenticatedApp(result.user);
+    showToast("登录成功");
+  } catch (error) { setAuthMessage(error.message, "error"); }
+}
+
+async function submitRegister(event) {
+  event.preventDefault();
+  try {
+    const result = await api("/api/auth/register", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: $("#registerUsername").value.trim(), phone: $("#registerPhone").value.trim(),
+        code: $("#registerCode").value.trim(), password: $("#registerPassword").value
+      })
+    });
+    showAuthenticatedApp(result.user);
+    showToast("注册成功，欢迎使用星笺");
+  } catch (error) { setAuthMessage(error.message, "error"); }
+}
+
+async function submitReset(event) {
+  event.preventDefault();
+  try {
+    const result = await api("/api/auth/reset-password", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone: $("#resetPhone").value.trim(), code: $("#resetCode").value.trim(), password: $("#resetPassword").value })
+    });
+    switchAuthView("login");
+    setAuthMessage(result.message);
+  } catch (error) { setAuthMessage(error.message, "error"); }
+}
+
+async function logout() {
+  try { await api("/api/auth/logout", { method: "POST" }); } catch (_) { /* local logout still clears UI */ }
+  state.contacts = [];
+  elements.appShell.hidden = true;
+  elements.authScreen.hidden = false;
+  $("#loginPassword").value = "";
+  switchAuthView("login");
+  setAuthMessage("已安全退出");
 }
 
 async function loadContacts() {
@@ -189,4 +307,12 @@ $("#confirmDeleteButton").addEventListener("click", confirmDelete);
 elements.dialog.addEventListener("click", event => { if (event.target === elements.dialog) closeContactDialog(); });
 elements.confirmDialog.addEventListener("click", event => { if (event.target === elements.confirmDialog) elements.confirmDialog.close(); });
 
-loadContacts();
+document.querySelectorAll(".auth-tab").forEach(tab => tab.addEventListener("click", () => switchAuthView(tab.dataset.authView)));
+document.querySelectorAll("[data-switch-view]").forEach(button => button.addEventListener("click", () => switchAuthView(button.dataset.switchView)));
+document.querySelectorAll("[data-send-code]").forEach(button => button.addEventListener("click", () => sendCode(button.dataset.sendCode, button)));
+$("#loginForm").addEventListener("submit", submitLogin);
+$("#registerForm").addEventListener("submit", submitRegister);
+$("#resetForm").addEventListener("submit", submitReset);
+$("#logoutButton").addEventListener("click", logout);
+
+bootstrapAuth();
