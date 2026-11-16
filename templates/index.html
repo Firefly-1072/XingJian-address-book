@@ -3,66 +3,130 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>星笺 · 基础版</title>
+  <meta name="description" content="星笺：支持收藏、多联系方式和Excel导入导出的本地通讯录">
+  <title>星笺 · 私人通讯录</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <div class="page-shell">
-    <header class="hero">
-      <div>
-        <p class="eyebrow">XINGJIAN · ITERATION 01</p>
-        <h1>星笺</h1>
-        <p>把重要的人，安静地收藏在一页星光里。</p>
-      </div>
-      <button id="addButton" class="primary">＋ 添加联系人</button>
-    </header>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="星笺通讯录首页">
+        <span class="brand-mark">星</span>
+        <span><strong>星笺</strong><small>PRIVATE CONTACT BOOK</small></span>
+      </a>
 
-    <main class="panel">
-      <div class="toolbar">
+      <nav class="nav" aria-label="通讯录分类">
+        <button class="nav-item active" data-filter="all" aria-label="全部联系人">
+          <span class="nav-icon">⌂</span><span>全部联系人</span><b id="allCount">0</b>
+        </button>
+        <button class="nav-item" data-filter="favorite" aria-label="我的收藏">
+          <span class="nav-icon">★</span><span>我的收藏</span><b id="favoriteCount">0</b>
+        </button>
+      </nav>
+
+      <div class="sidebar-note">
+        <span>本地数据</span>
+        <p>联系人保存在 SQLite 数据库中，仅在你的电脑上运行。</p>
+      </div>
+      <p class="version">EE308FZ · XP Pair Project</p>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">PERSONAL DIRECTORY</p>
+          <h1 id="pageTitle">全部联系人</h1>
+          <p id="pageSubtitle">集中管理重要的人与每一种联系方式</p>
+        </div>
+        <div class="header-actions">
+          <input id="importInput" type="file" accept=".xlsx" hidden>
+          <button class="button ghost" id="importButton" type="button"><span>⇧</span> 导入 Excel</button>
+          <a class="button ghost" href="/api/export"><span>⇩</span> 导出 Excel</a>
+          <button class="button primary" id="addButton" type="button"><span>＋</span> 新建联系人</button>
+        </div>
+      </header>
+
+      <section class="toolbar" aria-label="搜索和统计">
         <label class="search">
           <span>⌕</span>
-          <input id="searchInput" type="search" placeholder="搜索姓名、电话、邮箱或公司">
+          <input id="searchInput" type="search" placeholder="搜索姓名、公司或联系方式…" autocomplete="off">
+          <kbd>Ctrl K</kbd>
         </label>
-        <span id="countText" class="count">0 位联系人</span>
-      </div>
+        <div class="stat"><strong id="visibleCount">0</strong><span>当前显示</span></div>
+      </section>
 
-      <section id="contactList" class="contact-grid" aria-live="polite"></section>
-      <section id="emptyState" class="empty" hidden>
-        <div>✦</div>
-        <h2>还没有联系人</h2>
-        <p>添加第一位联系人，开始建立你的通讯录。</p>
+      <section id="contactGrid" class="contact-grid" aria-live="polite"></section>
+
+      <section id="emptyState" class="empty-state" hidden>
+        <div class="empty-illustration"><span>人</span><i></i><i></i><i></i></div>
+        <h2>这里还没有联系人</h2>
+        <p id="emptyText">添加第一位联系人，建立你们之间的连接。</p>
+        <button class="button primary" id="emptyAddButton" type="button">＋ 新建联系人</button>
       </section>
     </main>
   </div>
 
-  <dialog id="contactDialog">
-    <form id="contactForm" class="contact-form">
-      <div class="dialog-head">
+  <dialog id="contactDialog" class="dialog">
+    <form id="contactForm" method="dialog">
+      <div class="dialog-header">
         <div>
-          <p class="eyebrow">CONTACT</p>
-          <h2 id="dialogTitle">添加联系人</h2>
+          <p class="eyebrow">CONTACT DETAILS</p>
+          <h2 id="dialogTitle">新建联系人</h2>
         </div>
-        <button type="button" class="icon-button" id="closeDialog" aria-label="关闭">×</button>
+        <button class="icon-button" id="closeDialogButton" type="button" aria-label="关闭">×</button>
       </div>
 
-      <input id="contactId" type="hidden">
-      <label>姓名 <b>*</b><input id="name" maxlength="100" required></label>
-      <div class="two-columns">
-        <label>电话<input id="phone" maxlength="50"></label>
-        <label>邮箱<input id="email" type="email" maxlength="120"></label>
+      <div class="form-body">
+        <div class="form-grid">
+          <label class="field"><span>姓名 <em>*</em></span><input id="nameInput" name="name" maxlength="80" required placeholder="例如：林晓然"></label>
+          <label class="field"><span>公司 / 组织</span><input id="companyInput" name="company" maxlength="100" placeholder="例如：福州大学"></label>
+        </div>
+
+        <label class="favorite-switch">
+          <input id="favoriteInput" type="checkbox">
+          <span class="switch-star">★</span>
+          <span><strong>收藏此联系人</strong><small>收藏后将显示在列表顶部</small></span>
+          <i></i>
+        </label>
+
+        <div class="methods-heading">
+          <div><h3>联系方式</h3><p>一位联系人可以添加多种、多个联系方式</p></div>
+          <button class="text-button" id="addMethodButton" type="button">＋ 添加一项</button>
+        </div>
+        <div id="methodsList" class="methods-list"></div>
+
+        <label class="field"><span>备注</span><textarea id="notesInput" maxlength="1000" rows="3" placeholder="记录称呼、见面地点或其他信息…"></textarea></label>
       </div>
-      <label>公司<input id="company" maxlength="120"></label>
-      <label>备注<textarea id="notes" rows="4" maxlength="1000"></textarea></label>
-      <p class="hint">电话和邮箱至少填写一项。</p>
-      <p id="formError" class="error" hidden></p>
-      <div class="actions">
-        <button type="button" class="secondary" id="cancelButton">取消</button>
-        <button type="submit" class="primary">保存联系人</button>
+
+      <div class="dialog-footer">
+        <button class="button ghost" id="cancelButton" type="button">取消</button>
+        <button class="button primary" type="submit">保存联系人</button>
       </div>
     </form>
   </dialog>
 
-  <div id="toast" class="toast" hidden></div>
+  <dialog id="confirmDialog" class="confirm-dialog">
+    <div class="confirm-icon">!</div>
+    <h2>删除联系人？</h2>
+    <p>删除后将无法恢复该联系人及其所有联系方式。</p>
+    <div><button class="button ghost" id="cancelDeleteButton">取消</button><button class="button danger" id="confirmDeleteButton">确认删除</button></div>
+  </dialog>
+
+  <template id="methodTemplate">
+    <div class="method-row">
+      <select class="method-type" aria-label="联系方式类型">
+        <option value="phone">电话</option><option value="email">邮箱</option><option value="social">社交账号</option><option value="address">地址</option><option value="other">其他</option>
+      </select>
+      <input class="method-label" maxlength="30" placeholder="标签（如工作）" aria-label="标签">
+      <input class="method-value" maxlength="240" placeholder="请输入联系方式" aria-label="联系方式内容">
+      <button class="remove-method" type="button" aria-label="删除此联系方式">×</button>
+    </div>
+  </template>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

@@ -1,154 +1,192 @@
-const state = { contacts: [], query: "" };
+const state = { contacts: [], filter: "all", query: "", editingId: null, deletingId: null };
 
-const $ = selector => document.querySelector(selector);
+const $ = (selector) => document.querySelector(selector);
 const elements = {
-  list: $("#contactList"),
-  empty: $("#emptyState"),
-  count: $("#countText"),
-  search: $("#searchInput"),
-  dialog: $("#contactDialog"),
-  form: $("#contactForm"),
-  title: $("#dialogTitle"),
-  id: $("#contactId"),
-  name: $("#name"),
-  phone: $("#phone"),
-  email: $("#email"),
-  company: $("#company"),
-  notes: $("#notes"),
-  error: $("#formError"),
-  toast: $("#toast"),
+  grid: $("#contactGrid"), empty: $("#emptyState"), emptyText: $("#emptyText"),
+  search: $("#searchInput"), allCount: $("#allCount"), favoriteCount: $("#favoriteCount"), visibleCount: $("#visibleCount"),
+  title: $("#pageTitle"), subtitle: $("#pageSubtitle"), dialog: $("#contactDialog"), form: $("#contactForm"),
+  dialogTitle: $("#dialogTitle"), name: $("#nameInput"), company: $("#companyInput"), favorite: $("#favoriteInput"),
+  notes: $("#notesInput"), methods: $("#methodsList"), methodTemplate: $("#methodTemplate"),
+  importInput: $("#importInput"), confirmDialog: $("#confirmDialog"), toast: $("#toast")
 };
 
+const methodIcons = { phone: "☎", email: "@", social: "#", address: "⌖", other: "·" };
+const methodNames = { phone: "电话", email: "邮箱", social: "社交账号", address: "地址", other: "其他" };
+
 function escapeHtml(value = "") {
-  return String(value).replace(/[&<>'"]/g, char => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
-  })[char]);
+  const node = document.createElement("span");
+  node.textContent = String(value);
+  return node.innerHTML;
 }
 
 async function api(url, options = {}) {
-  const response = await fetch(url, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options,
-  });
-  if (response.status === 204) return null;
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "操作失败，请稍后重试");
-  return data;
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    let message = "操作失败，请稍后重试";
+    try { message = (await response.json()).error || message; } catch (_) { /* response is not JSON */ }
+    throw new Error(message);
+  }
+  return response.status === 204 ? null : response.json();
 }
 
-function showToast(message) {
+function showToast(message, isError = false) {
   elements.toast.textContent = message;
-  elements.toast.hidden = false;
+  elements.toast.className = `toast show${isError ? " error" : ""}`;
   clearTimeout(showToast.timer);
-  showToast.timer = setTimeout(() => { elements.toast.hidden = true; }, 2200);
+  showToast.timer = setTimeout(() => elements.toast.className = "toast", 2600);
+}
+
+function debounce(callback, wait = 250) {
+  let timer;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => callback(...args), wait); };
 }
 
 async function loadContacts() {
   const params = new URLSearchParams();
   if (state.query) params.set("q", state.query);
-  const data = await api(`/api/contacts?${params}`);
-  state.contacts = data.contacts;
-  renderContacts(data.total);
-}
-
-function renderContacts(total) {
-  elements.count.textContent = `${total} 位联系人`;
-  elements.empty.hidden = state.contacts.length > 0;
-  elements.list.innerHTML = state.contacts.map(contact => `
-    <article class="contact-card">
-      <div class="avatar">${escapeHtml(contact.name.slice(0, 1).toUpperCase())}</div>
-      <div class="contact-main">
-        <h2>${escapeHtml(contact.name)}</h2>
-        <p class="company">${escapeHtml(contact.company || "未填写公司")}</p>
-        <div class="details">
-          ${contact.phone ? `<span>☎ ${escapeHtml(contact.phone)}</span>` : ""}
-          ${contact.email ? `<span>✉ ${escapeHtml(contact.email)}</span>` : ""}
-        </div>
-        ${contact.notes ? `<p class="notes">${escapeHtml(contact.notes)}</p>` : ""}
-      </div>
-      <div class="card-actions">
-        <button data-action="edit" data-id="${contact.id}">编辑</button>
-        <button data-action="delete" data-id="${contact.id}" class="danger">删除</button>
-      </div>
-    </article>
-  `).join("");
-}
-
-function openDialog(contact = null) {
-  elements.form.reset();
-  elements.error.hidden = true;
-  elements.id.value = contact?.id || "";
-  elements.name.value = contact?.name || "";
-  elements.phone.value = contact?.phone || "";
-  elements.email.value = contact?.email || "";
-  elements.company.value = contact?.company || "";
-  elements.notes.value = contact?.notes || "";
-  elements.title.textContent = contact ? "编辑联系人" : "添加联系人";
-  elements.dialog.showModal();
-  elements.name.focus();
-}
-
-function closeDialog() {
-  elements.dialog.close();
-}
-
-$("#addButton").addEventListener("click", () => openDialog());
-$("#closeDialog").addEventListener("click", closeDialog);
-$("#cancelButton").addEventListener("click", closeDialog);
-
-elements.dialog.addEventListener("click", event => {
-  if (event.target === elements.dialog) closeDialog();
-});
-
-elements.form.addEventListener("submit", async event => {
-  event.preventDefault();
-  const id = elements.id.value;
-  const body = {
-    name: elements.name.value,
-    phone: elements.phone.value,
-    email: elements.email.value,
-    company: elements.company.value,
-    notes: elements.notes.value,
-  };
+  if (state.filter === "favorite") params.set("favorite", "1");
   try {
-    await api(id ? `/api/contacts/${id}` : "/api/contacts", {
-      method: id ? "PUT" : "POST",
-      body: JSON.stringify(body),
-    });
-    closeDialog();
-    showToast(id ? "联系人已更新" : "联系人已添加");
-    await loadContacts();
-  } catch (error) {
-    elements.error.textContent = error.message;
-    elements.error.hidden = false;
-  }
-});
+    const data = await api(`/api/contacts?${params}`);
+    state.contacts = data.contacts;
+    elements.allCount.textContent = data.total;
+    elements.favoriteCount.textContent = data.favoriteCount;
+    renderContacts();
+  } catch (error) { showToast(error.message, true); }
+}
 
-elements.list.addEventListener("click", async event => {
+function renderContacts() {
+  elements.visibleCount.textContent = state.contacts.length;
+  elements.grid.innerHTML = state.contacts.map((contact, index) => {
+    const methods = contact.methods.slice(0, 2).map(method => `
+      <div class="method-line"><i>${methodIcons[method.type] || "·"}</i><span title="${escapeHtml(method.value)}">${method.label ? `${escapeHtml(method.label)} · ` : ""}${escapeHtml(method.value)}</span></div>
+    `).join("");
+    const remainder = contact.methods.length > 2 ? `另有 ${contact.methods.length - 2} 项` : `${contact.methods.length} 项联系方式`;
+    return `
+      <article class="contact-card${contact.isFavorite ? " favorite" : ""}" style="animation-delay:${Math.min(index * 35, 280)}ms">
+        <div class="card-head">
+          <div class="avatar">${escapeHtml(contact.name.slice(0, 1).toUpperCase())}</div>
+          <div class="card-identity"><h2>${escapeHtml(contact.name)}</h2><p>${escapeHtml(contact.company || "未填写公司或组织")}</p></div>
+          <button class="favorite-button${contact.isFavorite ? " active" : ""}" data-action="favorite" data-id="${contact.id}" aria-label="${contact.isFavorite ? "取消收藏" : "添加收藏"}">★</button>
+        </div>
+        <div class="method-preview">${methods || '<span class="no-method">暂未添加联系方式</span>'}</div>
+        <div class="card-footer"><span class="method-count">${remainder}</span><div class="card-menu"><button data-action="edit" data-id="${contact.id}">编辑</button><button class="delete" data-action="delete" data-id="${contact.id}">删除</button></div></div>
+      </article>`;
+  }).join("");
+  const isEmpty = state.contacts.length === 0;
+  elements.grid.hidden = isEmpty;
+  elements.empty.hidden = !isEmpty;
+  elements.emptyText.textContent = state.query ? "没有找到匹配的联系人，试试其他关键词。" : state.filter === "favorite" ? "收藏重要联系人后，可以在这里快速找到他们。" : "添加第一位联系人，建立你们之间的连接。";
+}
+
+function addMethod(method = {}) {
+  const fragment = elements.methodTemplate.content.cloneNode(true);
+  const row = fragment.querySelector(".method-row");
+  row.querySelector(".method-type").value = method.type || "phone";
+  row.querySelector(".method-label").value = method.label || "";
+  row.querySelector(".method-value").value = method.value || "";
+  row.querySelector(".remove-method").addEventListener("click", () => {
+    row.remove();
+    if (!elements.methods.children.length) addMethod();
+  });
+  elements.methods.appendChild(fragment);
+}
+
+function openContactDialog(contact = null) {
+  state.editingId = contact?.id || null;
+  elements.dialogTitle.textContent = contact ? "编辑联系人" : "新建联系人";
+  elements.name.value = contact?.name || "";
+  elements.company.value = contact?.company || "";
+  elements.favorite.checked = contact?.isFavorite || false;
+  elements.notes.value = contact?.notes || "";
+  elements.methods.innerHTML = "";
+  (contact?.methods?.length ? contact.methods : [{}]).forEach(addMethod);
+  elements.dialog.showModal();
+  setTimeout(() => elements.name.focus(), 50);
+}
+
+function closeContactDialog() { elements.dialog.close(); state.editingId = null; }
+
+async function saveContact(event) {
+  event.preventDefault();
+  if (!elements.form.reportValidity()) return;
+  const methods = [...elements.methods.querySelectorAll(".method-row")].map(row => ({
+    type: row.querySelector(".method-type").value,
+    label: row.querySelector(".method-label").value.trim(),
+    value: row.querySelector(".method-value").value.trim()
+  })).filter(method => method.value);
+  const payload = { name: elements.name.value.trim(), company: elements.company.value.trim(), isFavorite: elements.favorite.checked, notes: elements.notes.value.trim(), methods };
+  const isEditing = Boolean(state.editingId);
+  try {
+    await api(isEditing ? `/api/contacts/${state.editingId}` : "/api/contacts", {
+      method: isEditing ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+    });
+    closeContactDialog();
+    await loadContacts();
+    showToast(isEditing ? "联系人已更新" : "联系人已添加");
+  } catch (error) { showToast(error.message, true); }
+}
+
+async function handleGridClick(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
-  const contact = state.contacts.find(item => item.id === Number(button.dataset.id));
+  const id = Number(button.dataset.id);
+  const contact = state.contacts.find(item => item.id === id);
   if (!contact) return;
-
-  if (button.dataset.action === "edit") openDialog(contact);
-  if (button.dataset.action === "delete" && confirm(`确定删除“${contact.name}”吗？`)) {
+  if (button.dataset.action === "edit") openContactDialog(contact);
+  if (button.dataset.action === "delete") { state.deletingId = id; elements.confirmDialog.showModal(); }
+  if (button.dataset.action === "favorite") {
     try {
-      await api(`/api/contacts/${contact.id}`, { method: "DELETE" });
-      showToast("联系人已删除");
+      await api(`/api/contacts/${id}/favorite`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isFavorite: !contact.isFavorite }) });
       await loadContacts();
-    } catch (error) {
-      showToast(error.message);
-    }
+      showToast(contact.isFavorite ? "已取消收藏" : "已加入收藏");
+    } catch (error) { showToast(error.message, true); }
   }
-});
+}
 
-let searchTimer;
-elements.search.addEventListener("input", event => {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => {
-    state.query = event.target.value.trim();
-    loadContacts().catch(error => showToast(error.message));
-  }, 250);
-});
+async function confirmDelete() {
+  try {
+    await api(`/api/contacts/${state.deletingId}`, { method: "DELETE" });
+    elements.confirmDialog.close();
+    state.deletingId = null;
+    await loadContacts();
+    showToast("联系人已删除");
+  } catch (error) { showToast(error.message, true); }
+}
 
-loadContacts().catch(error => showToast(error.message));
+async function importExcel(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append("file", file);
+  try {
+    const result = await api("/api/import", { method: "POST", body: formData });
+    await loadContacts();
+    showToast(result.message);
+  } catch (error) { showToast(error.message, true); }
+  finally { elements.importInput.value = ""; }
+}
+
+document.querySelectorAll(".nav-item").forEach(button => button.addEventListener("click", () => {
+  document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item === button));
+  state.filter = button.dataset.filter;
+  elements.title.textContent = state.filter === "favorite" ? "我的收藏" : "全部联系人";
+  elements.subtitle.textContent = state.filter === "favorite" ? "重要的人，始终触手可及" : "集中管理重要的人与每一种联系方式";
+  loadContacts();
+}));
+elements.search.addEventListener("input", debounce(event => { state.query = event.target.value.trim(); loadContacts(); }));
+document.addEventListener("keydown", event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); elements.search.focus(); } });
+$("#addButton").addEventListener("click", () => openContactDialog());
+$("#emptyAddButton").addEventListener("click", () => openContactDialog());
+$("#addMethodButton").addEventListener("click", () => addMethod());
+$("#closeDialogButton").addEventListener("click", closeContactDialog);
+$("#cancelButton").addEventListener("click", closeContactDialog);
+elements.form.addEventListener("submit", saveContact);
+elements.grid.addEventListener("click", handleGridClick);
+$("#importButton").addEventListener("click", () => elements.importInput.click());
+elements.importInput.addEventListener("change", importExcel);
+$("#cancelDeleteButton").addEventListener("click", () => { elements.confirmDialog.close(); state.deletingId = null; });
+$("#confirmDeleteButton").addEventListener("click", confirmDelete);
+elements.dialog.addEventListener("click", event => { if (event.target === elements.dialog) closeContactDialog(); });
+elements.confirmDialog.addEventListener("click", event => { if (event.target === elements.confirmDialog) elements.confirmDialog.close(); });
+
+loadContacts();
