@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>星笺 · 基础版</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">XINGJIAN · ITERATION 01</p>
+        <h1>星笺</h1>
+        <p>把重要的人，安静地收藏在一页星光里。</p>
+      </div>
+      <button id="addButton" class="primary">＋ 添加联系人</button>
+    </header>
+
+    <main class="panel">
+      <div class="toolbar">
+        <label class="search">
+          <span>⌕</span>
+          <input id="searchInput" type="search" placeholder="搜索姓名、电话、邮箱或公司">
+        </label>
+        <span id="countText" class="count">0 位联系人</span>
+      </div>
+
+      <section id="contactList" class="contact-grid" aria-live="polite"></section>
+      <section id="emptyState" class="empty" hidden>
+        <div>✦</div>
+        <h2>还没有联系人</h2>
+        <p>添加第一位联系人，开始建立你的通讯录。</p>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="contactDialog">
+    <form id="contactForm" class="contact-form">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">CONTACT</p>
+          <h2 id="dialogTitle">添加联系人</h2>
+        </div>
+        <button type="button" class="icon-button" id="closeDialog" aria-label="关闭">×</button>
+      </div>
+
+      <input id="contactId" type="hidden">
+      <label>姓名 <b>*</b><input id="name" maxlength="100" required></label>
+      <div class="two-columns">
+        <label>电话<input id="phone" maxlength="50"></label>
+        <label>邮箱<input id="email" type="email" maxlength="120"></label>
+      </div>
+      <label>公司<input id="company" maxlength="120"></label>
+      <label>备注<textarea id="notes" rows="4" maxlength="1000"></textarea></label>
+      <p class="hint">电话和邮箱至少填写一项。</p>
+      <p id="formError" class="error" hidden></p>
+      <div class="actions">
+        <button type="button" class="secondary" id="cancelButton">取消</button>
+        <button type="submit" class="primary">保存联系人</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
